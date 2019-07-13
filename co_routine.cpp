@@ -15,7 +15,7 @@
 * See the License for the specific language governing permissions and 
 * limitations under the License.
 */
-
+#include "log.h"
 #include "co_routine.h"
 #include "co_routine_inner.h"
 #include "co_epoll.h"
@@ -445,6 +445,7 @@ static int CoRoutineFunc( stCoRoutine_t *co,void * )
 {
 	if( co->pfn )
 	{
+        printf("CoRoutineFunc co:%p arg:%p\n", co, co->arg);
 		co->pfn( co->arg );
 	}
 	co->cEnd = 1;
@@ -461,7 +462,17 @@ static int CoRoutineFunc( stCoRoutine_t *co,void * )
 struct stCoRoutine_t *co_create_env( stCoRoutineEnv_t * env, const stCoRoutineAttr_t* attr,
 		pfn_co_routine_t pfn,void *arg )
 {
-
+    //struct stCoRoutineAttr_t
+    //{
+    //    int stack_size;
+    //    stShareStack_t*  share_stack;
+    //    stCoRoutineAttr_t()
+    //    {
+    //        stack_size = 128 * 1024;
+    //        share_stack = NULL;
+    //    }
+    //}__attribute__ ((packed));
+    
 	stCoRoutineAttr_t at;
 	if( attr )
 	{
@@ -476,6 +487,7 @@ struct stCoRoutine_t *co_create_env( stCoRoutineEnv_t * env, const stCoRoutineAt
 		at.stack_size = 1024 * 1024 * 8;
 	}
 
+    //4k对齐
 	if( at.stack_size & 0xFFF ) 
 	{
 		at.stack_size &= ~0xFFF;
@@ -525,6 +537,8 @@ int co_create( stCoRoutine_t **ppco,const stCoRoutineAttr_t *attr,pfn_co_routine
 		co_init_curr_thread_env();
 	}
 	stCoRoutine_t *co = co_create_env( co_get_curr_thread_env(), attr, pfn,arg );
+    //CO_LOG(WARN, "new co:%p", co);
+    printf("co_create:%p\n", co);
 	*ppco = co;
 	return 0;
 }
@@ -554,7 +568,9 @@ void co_resume( stCoRoutine_t *co )
 		co->cStart = 1;
 	}
 	env->pCallStack[ env->iCallStackSize++ ] = co;
+    //printf("1iCallStackSize:%d, cur:%p co:%p\n", env->iCallStackSize, lpCurrRoutine, co);
 	co_swap( lpCurrRoutine, co );
+    //printf("2iCallStackSize:%d, cur:%p co:%p\n", env->iCallStackSize, lpCurrRoutine, co);
 
 
 }
@@ -565,6 +581,7 @@ void co_yield_env( stCoRoutineEnv_t *env )
 	stCoRoutine_t *curr = env->pCallStack[ env->iCallStackSize - 1 ];
 
 	env->iCallStackSize--;
+    //printf("co_yield_env, cur:%p co:%p\n", curr, last);
 
 	co_swap( curr, last);
 }
@@ -598,6 +615,7 @@ void save_stack_buffer(stCoRoutine_t* occupy_co)
 
 void co_swap(stCoRoutine_t* curr, stCoRoutine_t* pending_co)
 {
+    //printf("1co_swap cur:%p co:%p\n", curr, pending_co);
  	stCoRoutineEnv_t* env = co_get_curr_thread_env();
 
 	//get curr stack sp
@@ -611,6 +629,7 @@ void co_swap(stCoRoutine_t* curr, stCoRoutine_t* pending_co)
 	}
 	else 
 	{
+        printf("[%s:%d][%s] BUG\n", __FILE__, __LINE__, __FUNCTION__);
 		env->pending_co = pending_co;
 		//get last occupy co on the same stack mem
 		stCoRoutine_t* occupy_co = pending_co->stack_mem->occupy_co;
@@ -623,9 +642,10 @@ void co_swap(stCoRoutine_t* curr, stCoRoutine_t* pending_co)
 			save_stack_buffer(occupy_co);
 		}
 	}
-
+    //printf("2co_swap cur:%p co:%p\n", curr, pending_co);
 	//swap context
 	coctx_swap(&(curr->ctx),&(pending_co->ctx) );
+    //printf("3co_swap cur:%p\n", curr);
 
 	//stack buffer may be overwrite, so get again;
 	stCoRoutineEnv_t* curr_env = co_get_curr_thread_env();
@@ -640,6 +660,7 @@ void co_swap(stCoRoutine_t* curr, stCoRoutine_t* pending_co)
 			memcpy(update_pending_co->stack_sp, update_pending_co->save_buffer, update_pending_co->save_size);
 		}
 	}
+    //printf("4co_swap cur:%p co:%p\n", curr, pending_co);
 }
 
 
@@ -700,7 +721,7 @@ static short EpollEvent2Poll( uint32_t events )
 	if( events & EPOLLWRNORM ) e |= POLLWRNORM;
 	return e;
 }
-
+//__thread 线程局部存储 线程间互不干扰
 static __thread stCoRoutineEnv_t* gCoEnvPerThread = NULL;
 
 void co_init_curr_thread_env()
@@ -709,17 +730,22 @@ void co_init_curr_thread_env()
 	stCoRoutineEnv_t *env = gCoEnvPerThread;
 
 	env->iCallStackSize = 0;
+    //创建主协程 pfn为NULL
 	struct stCoRoutine_t *self = co_create_env( env, NULL, NULL,NULL );
+    //标记为主协程
 	self->cIsMain = 1;
 
 	env->pending_co = NULL;
 	env->occupy_co = NULL;
 
+    //self->ctx清零
 	coctx_init( &self->ctx );
 
+    //env->iCallStackSize = 1
 	env->pCallStack[ env->iCallStackSize++ ] = self;
 
 	stCoEpoll_t *ev = AllocEpoll();
+    //env->pEpoll = ev;
 	SetEpoll( env,ev );
 }
 stCoRoutineEnv_t *co_get_curr_thread_env()
@@ -730,7 +756,10 @@ stCoRoutineEnv_t *co_get_curr_thread_env()
 void OnPollProcessEvent( stTimeoutItem_t * ap )
 {
 	stCoRoutine_t *co = (stCoRoutine_t*)ap->pArg;
+    printf("before ProcessEvent ap:%p, co:%p\n", ap, co);
 	co_resume( co );
+    printf("after ProcessEvent ap:%p, co:%p\n", ap, co);
+
 }
 
 void OnPollPreparePfn( stTimeoutItem_t * ap,struct epoll_event &e,stTimeoutItemLink_t *active )

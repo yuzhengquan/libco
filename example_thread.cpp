@@ -29,11 +29,13 @@
 
 int loop(void *)
 {
+    //printf("loop\n");
 	return 0;
 }
 static void *routine_func( void * )
 {
 	stCoEpoll_t * ev = co_get_epoll_ct(); //ct = current thread
+    printf("%s %d", __FILE__, __LINE__);
 	co_eventloop( ev,loop,0 );
 	return 0;
 }

@@ -340,7 +340,10 @@ ssize_t read( int fd, void *buf, size_t nbyte )
 
 	if( !lp || ( O_NONBLOCK & lp->user_flag ) ) 
 	{
+        printf("before NONBLOCK read fd:%d\n", fd);
 		ssize_t ret = g_sys_read_func( fd,buf,nbyte );
+        printf("after NONBLOCK read fd:%d ret:%d\n", fd, ret);
+
 		return ret;
 	}
 	int timeout = ( lp->read_timeout.tv_sec * 1000 ) 
@@ -349,10 +352,11 @@ ssize_t read( int fd, void *buf, size_t nbyte )
 	struct pollfd pf = { 0 };
 	pf.fd = fd;
 	pf.events = ( POLLIN | POLLERR | POLLHUP );
-
+    printf("1before read fd:%d\n", fd);
 	int pollret = poll( &pf,1,timeout );
-
 	ssize_t readret = g_sys_read_func( fd,(char*)buf ,nbyte );
+    printf("2after read fd:%d ret:%d\n", fd, readret);
+
 
 	if( readret < 0 )
 	{
@@ -900,7 +904,6 @@ struct hostent *gethostbyname(const char *name)
 	HOOK_SYS_FUNC( gethostbyname );
 
 #if defined( __APPLE__ ) || defined( __FreeBSD__ )
-	return g_sys_gethostbyname_func( name );
 #else
 	if (!co_is_enable_sys_hook())
 	{
@@ -989,7 +992,7 @@ struct hostent *co_gethostbyname(const char *name)
 #endif
 
 
-void co_enable_hook_sys() //Õâº¯Êý±ØÐëÔÚÕâÀï,·ñÔò±¾ÎÄ¼þ»á±»ºöÂÔ£¡£¡£¡
+void co_enable_hook_sys() //ï¿½âº¯ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½á±»ï¿½ï¿½ï¿½Ô£ï¿½ï¿½ï¿½ï¿½ï¿½
 {
 	stCoRoutine_t *co = GetCurrThreadCo();
 	if( co )

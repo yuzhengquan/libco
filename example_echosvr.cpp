@@ -90,6 +90,8 @@ static void *readwrite_routine( void *arg )
 			int ret = read( fd,buf,sizeof(buf) );
 			if( ret > 0 )
 			{
+                printf("rev %s\n", buf);
+                buf[0] = 'a';
 				ret = write( fd,buf,ret );
 			}
 			if( ret > 0 || ( -1 == ret && EAGAIN == errno ) )
@@ -111,7 +113,7 @@ static void *accept_routine( void * )
 	fflush(stdout);
 	for(;;)
 	{
-		//printf("pid %ld g_readwrite.size %ld\n",getpid(),g_readwrite.size());
+		printf("pid %ld g_readwrite.size %ld\n",getpid(),g_readwrite.size());
 		if( g_readwrite.empty() )
 		{
 			printf("empty\n"); //sleep

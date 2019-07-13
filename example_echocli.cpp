@@ -15,9 +15,10 @@
 * See the License for the specific language governing permissions and 
 * limitations under the License.
 */
+#include "log.h"
+#include "list.h"
 
 #include "co_routine.h"
-
 #include <errno.h>
 #include <string.h>
 
@@ -34,6 +35,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <signal.h>
+
 
 using namespace std;
 struct stEndPoint
@@ -100,7 +102,8 @@ void AddFailCnt()
 
 static void *readwrite_routine( void *arg )
 {
-
+    printf("readwrite_routine %p\n", arg);
+    //return 0;
 	co_enable_hook_sys();
 
 	stEndPoint *endpoint = (stEndPoint *)arg;
@@ -108,7 +111,7 @@ static void *readwrite_routine( void *arg )
 	char buf[ 1024 * 16 ];
 	int fd = -1;
 	int ret = 0;
-	for(;;)
+	for(int i = 0; i < 3; i++)
 	{
 		if ( fd < 0 )
 		{
@@ -122,15 +125,19 @@ static void *readwrite_routine( void *arg )
 				struct pollfd pf = { 0 };
 				pf.fd = fd;
 				pf.events = (POLLOUT|POLLERR|POLLHUP);
+                printf("before co_poll i=%d fd:%d\n", i, fd);
 				co_poll( co_get_epoll_ct(),&pf,1,200);
+                printf("after co_poll i=%d fd:%d\n", i, fd);
 				//check connect
 				int error = 0;
 				uint32_t socklen = sizeof(error);
 				errno = 0;
+                printf("before getsockopt i=%d fd:%d\n", i, fd);
 				ret = getsockopt(fd, SOL_SOCKET, SO_ERROR,(void *)&error,  &socklen);
-				if ( ret == -1 ) 
+                printf("after getsockopt i=%d fd:%d\n", i, fd);
+                if ( ret == -1 ) 
 				{       
-					//printf("getsockopt ERROR ret %d %d:%s\n", ret, errno, strerror(errno));
+					printf("getsockopt ERROR ret %d %d:%s\n", ret, errno, strerror(errno));
 					close(fd);
 					fd = -1;
 					AddFailCnt();
@@ -139,7 +146,7 @@ static void *readwrite_routine( void *arg )
 				if ( error ) 
 				{       
 					errno = error;
-					//printf("connect ERROR ret %d %d:%s\n", error, errno, strerror(errno));
+					printf("connect ERROR ret %d %d:%s\n", error, errno, strerror(errno));
 					close(fd);
 					fd = -1;
 					AddFailCnt();
@@ -148,29 +155,32 @@ static void *readwrite_routine( void *arg )
 			} 
 	  			
 		}
-		
+		printf("before write i=%d fd:%d\n", i, fd);
 		ret = write( fd,str, 8);
+        printf("after write i=%d fd:%d ret:%d\n", i, fd, ret);
 		if ( ret > 0 )
 		{
+            printf("before read i=%d fd:%d\n", i, fd);
 			ret = read( fd,buf, sizeof(buf) );
+            printf("after read i=%d fd:%d ret:%d\n", i, fd, ret);
 			if ( ret <= 0 )
 			{
-				//printf("co %p read ret %d errno %d (%s)\n",
-				//		co_self(), ret,errno,strerror(errno));
+				printf("co %p read ret %d errno %d (%s)\n",
+						co_self(), ret,errno,strerror(errno));
 				close(fd);
 				fd = -1;
 				AddFailCnt();
 			}
 			else
 			{
-				//printf("echo %s fd %d\n", buf,fd);
+				printf("echo %s fd %d\n", buf,fd);
 				AddSuccCnt();
 			}
 		}
 		else
 		{
-			//printf("co %p write ret %d errno %d (%s)\n",
-			//		co_self(), ret,errno,strerror(errno));
+			printf("co %p write ret %d errno %d (%s)\n",
+					co_self(), ret,errno,strerror(errno));
 			close(fd);
 			fd = -1;
 			AddFailCnt();
@@ -181,6 +191,18 @@ static void *readwrite_routine( void *arg )
 
 int main(int argc,char *argv[])
 {
+    
+    //初始化参数
+    FLAGS_logtostderr = false;				//TRUE:标准输出,FALSE:文件输出
+    FLAGS_alsologtostderr = false;			//除了日志文件之外是否需要标准输出
+    FLAGS_colorlogtostderr = false;			//标准输出带颜色
+    FLAGS_logbufsecs = 0;					//设置可以缓冲日志的最大秒数，0指实时输出
+    FLAGS_max_log_size = 10;				//日志文件大小(单位：MB)
+    FLAGS_stop_logging_if_full_disk = true; //磁盘满时是否记录到磁盘
+    
+    google::InitGoogleLogging(argv[0]);
+    google::SetLogDestination(google::GLOG_INFO,"./log/echocli");
+    
 	stEndPoint endpoint;
 	endpoint.ip = argv[1];
 	endpoint.port = atoi(argv[2]);
@@ -193,7 +215,8 @@ int main(int argc,char *argv[])
 	
 	for(int k=0;k<proccnt;k++)
 	{
-
+        BUG_ON(true);
+        BUG();
 		pid_t pid = fork();
 		if( pid > 0 )
 		{
